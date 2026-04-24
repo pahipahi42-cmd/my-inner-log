@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type FeedbackResponse = {
   feedback?: string;
@@ -19,14 +21,26 @@ type SpeechRecognitionLike = {
 };
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-type FieldKey = "diary" | "mealCheck" | "studyLog" | "routineCheck" | "healthLog";
+type FieldKey = "diary" | "mealCheck";
 
 export default function Home() {
+  const router = useRouter();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+      }
+    };
+    checkAuth();
+  }, [router, supabase]);
+
   const [diary, setDiary] = useState("");
   const [mealCheck, setMealCheck] = useState("");
-  const [studyLog, setStudyLog] = useState("");
-  const [routineCheck, setRoutineCheck] = useState("");
-  const [healthLog, setHealthLog] = useState("");
   const [activeListeningField, setActiveListeningField] = useState<FieldKey | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -47,17 +61,11 @@ export default function Home() {
   const fieldValues: Record<FieldKey, string> = {
     diary,
     mealCheck,
-    studyLog,
-    routineCheck,
-    healthLog,
   };
 
   const setFieldValue: Record<FieldKey, (value: string) => void> = {
     diary: setDiary,
     mealCheck: setMealCheck,
-    studyLog: setStudyLog,
-    routineCheck: setRoutineCheck,
-    healthLog: setHealthLog,
   };
 
   const startVoiceInput = (field: FieldKey) => {
@@ -126,8 +134,10 @@ export default function Home() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!diary.trim()) {
-      setErrorMessage("日記は音声入力で記録してください。");
+    const allEmpty = !diary.trim() && !mealCheck.trim();
+
+    if (allEmpty) {
+      setErrorMessage("少なくとも1つのフィールドに記録してください。");
       return;
     }
 
@@ -139,9 +149,6 @@ export default function Home() {
       const payload = {
         diary,
         mealCheck,
-        studyLog,
-        routineCheck,
-        healthLog,
       };
       localStorage.setItem("self-discipline-log", JSON.stringify(payload));
 
@@ -167,16 +174,29 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   return (
     <div className="min-h-screen bg-[#050507] text-zinc-100">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 md:px-10">
         <section className="rounded-2xl border border-zinc-800 bg-[#0a0a0d] p-6 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            自己規律管理アプリ
-          </h1>
-          <p className="mt-2 text-sm text-zinc-400 md:text-base">
-            ストレス由来の暴食予防・電験三種合格・3時起床ルーティン継続のための統合ログ
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Clarity</h1>
+              <p className="text-lg text-zinc-500 italic font-light mt-1">...not cravings.</p>
+              <p className="mt-2 text-sm text-zinc-400 md:text-base">自己管理の出来る人間への記録</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:bg-zinc-900"
+            >
+              ログアウト
+            </button>
+          </div>
         </section>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -205,15 +225,14 @@ export default function Home() {
             <textarea
               value={diary}
               onChange={(e) => setDiary(e.target.value)}
-              placeholder="音声入力で感情やストレスを吐き出してください（必要時に手入力で微修正可）"
+              placeholder="Clarity を保てた瞬間 / 失った瞬間を書いてください(空欄でも送信可)"
               className="h-44 w-full rounded-xl border border-zinc-700 bg-[#07070a] p-3 text-sm leading-6 text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-emerald-500"
-              required
             />
           </section>
 
           <section className="rounded-2xl border border-zinc-800 bg-[#0c0c10] p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-medium">2. 食事チェック</h2>
+              <h2 className="text-lg font-medium">2. 食事(Cravings 監視)</h2>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -236,107 +255,17 @@ export default function Home() {
             <textarea
               value={mealCheck}
               onChange={(e) => setMealCheck(e.target.value)}
-              placeholder="1日1食（1,859kcal）遵守、AGO-DASHI等の混入、暴食の有無"
-              className="h-28 w-full rounded-xl border border-zinc-700 bg-[#07070a] p-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500"
-            />
-          </section>
-
-          <section className="rounded-2xl border border-zinc-800 bg-[#0c0c10] p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-medium">3. 電験三種 学習ログ</h2>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => startVoiceInput("studyLog")}
-                  disabled={activeListeningField === "studyLog"}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-emerald-900"
-                >
-                  {activeListeningField === "studyLog" ? "録音中..." : "🎤 音声入力開始"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stopVoiceInput("studyLog")}
-                  disabled={activeListeningField !== "studyLog"}
-                  className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-900"
-                >
-                  停止
-                </button>
-              </div>
-            </div>
-            <textarea
-              value={studyLog}
-              onChange={(e) => setStudyLog(e.target.value)}
-              placeholder="法規・機械を中心に、学習内容と時間を記録"
-              className="h-28 w-full rounded-xl border border-zinc-700 bg-[#07070a] p-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500"
-            />
-          </section>
-
-          <section className="rounded-2xl border border-zinc-800 bg-[#0c0c10] p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-medium">4. ルーティン確認</h2>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => startVoiceInput("routineCheck")}
-                  disabled={activeListeningField === "routineCheck"}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-emerald-900"
-                >
-                  {activeListeningField === "routineCheck" ? "録音中..." : "🎤 音声入力開始"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stopVoiceInput("routineCheck")}
-                  disabled={activeListeningField !== "routineCheck"}
-                  className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-900"
-                >
-                  停止
-                </button>
-              </div>
-            </div>
-            <textarea
-              value={routineCheck}
-              onChange={(e) => setRoutineCheck(e.target.value)}
-              placeholder="3時起床、瞑想、ジャーナリングの実施状況"
-              className="h-28 w-full rounded-xl border border-zinc-700 bg-[#07070a] p-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500"
-            />
-          </section>
-
-          <section className="rounded-2xl border border-zinc-800 bg-[#0c0c10] p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-medium">5. 体調記録</h2>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => startVoiceInput("healthLog")}
-                  disabled={activeListeningField === "healthLog"}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-emerald-900"
-                >
-                  {activeListeningField === "healthLog" ? "録音中..." : "🎤 音声入力開始"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stopVoiceInput("healthLog")}
-                  disabled={activeListeningField !== "healthLog"}
-                  className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-900"
-                >
-                  停止
-                </button>
-              </div>
-            </div>
-            <textarea
-              value={healthLog}
-              onChange={(e) => setHealthLog(e.target.value)}
-              placeholder="腰痛、歯の健康、睡眠の質、疲労感など"
+              placeholder="Cravings の兆候(暴食、衝動食い、感情的な食行動)を記録"
               className="h-28 w-full rounded-xl border border-zinc-700 bg-[#07070a] p-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500"
             />
           </section>
 
           <button
             type="submit"
-            disabled={isSaving}
+            disabled={isSaving || (!diary.trim() && !mealCheck.trim())}
             className="w-full rounded-xl bg-emerald-600 px-5 py-3 text-base font-semibold text-black transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-zinc-300"
           >
-            {isSaving ? "保存・AI分析中..." : "保存してAIフィードバックを受け取る"}
+            {isSaving ? "記録中..." : "記録して Clarity を見つめる"}
           </button>
         </form>
 
