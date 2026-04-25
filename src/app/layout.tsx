@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Clarity, not cravings.",
-  description: "自己管理の出来る人間への記録",
+  description: "今日を整える。積み重ねるか、崩すか。",
 };
 
 export default function RootLayout({
